@@ -2,7 +2,7 @@
 L.SvgLayer = L.Layer.extend({
     includes: L.Mixin.Events,
     options: {
-        pane: null
+        zIndex: undefined
     },
 
     initialize: function (options) {
@@ -39,6 +39,10 @@ L.SvgLayer = L.Layer.extend({
                 this._pathRoot.setAttribute('pointer-events', this.options.pointerEvents);
             }
 
+            if (this.options.zIndex !== undefined) {
+                this._pathRoot.style.zIndex = this.options.zIndex;
+            }
+
             if (this._map.options.zoomAnimation && L.Browser.any3d) {
                 L.DomUtil.addClass(this._pathRoot, 'leaflet-zoom-animated');
             } else {
@@ -47,13 +51,6 @@ L.SvgLayer = L.Layer.extend({
 
             this._updateSvgViewport();
         }
-    },
-
-    getPane: function(){
-        if(this.options.pane)
-            return this.options.pane;
-        else
-            return this._map.getPanes().overlayPane;
     },
 
     _uninitPathRoot: function () {
@@ -80,12 +77,10 @@ L.SvgLayer = L.Layer.extend({
     },
 
     _animatePathZoom: function (e) {
-        this._updateTransform(e.center, e.zoom);
-
         this._pathZooming = true;
+        this._updateTransform(e.center, e.zoom);
     },
 
-    
     _updateTransform: function (center, zoom) {
         var scale = this._map.getZoomScale(zoom, this._zoom),
 		    position = L.DomUtil.getPosition(this._pathRoot),

@@ -37,10 +37,9 @@
     <script src="./d3.min.js" type="text/javascript"></script> <!-- have to add it locally, sometimes doesn't load from cdn -->
     <script src="./d3layer.js"></script>
     <script src="./rhill-voronoi-core.min.js"></script>
-    <script src="./helper.js"></script>
     <script type="text/javascript">
         var mapLocation = new L.LatLng(49.6, 6.116667), // Luxembourg
-            w = 0.4, // longitudal degrees range vor random coorindates 
+            w = 0.4, // longitudal degrees range vor random coorindates
             h = 0.2, // latitudal degrees range for random coordinates
             count = 200, // number of random points to create
             buffer = 2500, // buffer for voronooi regions in meters
@@ -66,7 +65,7 @@
             var html =
                 '<div>ToDo: UI</div>';
             container.innerHTML = html;
-            fixClickPropagationSoItWorksForF___ingIE11(container);
+            fixClickPropagationSoItWorksForIE(container);
             return container;
         };
         info.addTo(map);
@@ -87,21 +86,17 @@
             };
         });
 
-        // the layer for the symbols (topmost)
-        var svgLayer = new L.SvgLayer({ pointerEvents: 'none' }).addTo(map);
-        var svgPath = d3.select(svgLayer.getPathRoot());
-        var points = svgPath.append("svg:g").attr("id", "points");
 
+        // create the layer for the symbols
         var applyLatLngToLayer = function (d) {
             var p = map.latLngToLayerPoint(new L.LatLng(d.lat, d.lng));
             return "translate(" + p.x + "," + p.y + ")";
         };
 
-        // Reposition the SVG to cover the features.
-        svgLayer.resetSvg = function (layer) {
-            points.selectAll("circle")
-                .attr("transform", applyLatLngToLayer);
-        };
+        // the layer for the symbols is topmost
+        var pointsLayer = new L.SvgLayer({ zIndex: 2, pointerEvents: 'none' }).addTo(map);
+        var pointsPath = d3.select(pointsLayer.getPathRoot());
+        var points = pointsPath.append("svg:g").attr("id", "points");
 
         // create the points
         points.selectAll("circle")
@@ -112,6 +107,13 @@
             .style("fill", function (d) { return d.type; })
             .attr('stroke', 'black');
 
+        // Reposition the SVG to cover the features.
+        pointsLayer.resetSvg = function (layer) {
+            points.selectAll("circle")
+                .attr("transform", applyLatLngToLayer);
+        };
+
+
 
         // calculate the coordinates for the (conformal) mercator projections
         // The voronoi diagram is calulated with mercator coordinates
@@ -121,14 +123,10 @@
             var merc = L.Projection.SphericalMercator.project(L.latLng(v.lat, v.lng));
             v.x = merc.x;
             v.y = merc.y;
-            if (merc.x < minx)
-                minx = merc.x;
-            if (merc.y < miny)
-                miny = merc.y;
-            if (merc.x > maxx)
-                maxx = merc.x;
-            if (merc.y > maxy)
-                maxy = merc.y;
+            if (merc.x < minx) minx = merc.x;
+            if (merc.y < miny) miny = merc.y;
+            if (merc.x > maxx) maxx = merc.x;
+            if (merc.y > maxy) maxy = merc.y;
         }
 
         // the buffer in mercator units is resized to match the latitude
@@ -150,6 +148,8 @@
                 innerEdges.push(e);
         }
 
+        // create the vornoi layer
+
         // transform a mercator coordinate to a relative layer coordinate
         // ToDo: must be a more direct way
         var mercToLayerPoint = function (m) {
@@ -157,11 +157,13 @@
             return map.latLngToLayerPoint(new L.LatLng(g.lat, g.lng));
         }
 
+        // get the translate string
         var applyMercToLayer = function (m) {
             var p = mercToLayerPoint(m);
             return "translate(" + p.x + "," + p.y + ")";
         }
 
+        // get the path for a voronoi region
         var getPath = function (d) {
             var coords = [];
             var v = d.halfedges[0].getStartpoint();
@@ -175,14 +177,13 @@
             return "M" + coords.join(",") + "Z";
         };
 
-
-
-        var voronoiLayer = new L.SvgLayer({ pane: map.getPanes().tilePane }).addTo(map);
+        // create the layer
+        var voronoiLayer = new L.SvgLayer({ zIndex: 0 }).addTo(map);
         var voronoiPath = d3.select(voronoiLayer.getPathRoot());
 
 
-        var paths, points, clips, borders, inner1, inner2;
-
+        // the elements holding the svg content
+        var paths, clips, borders, inner1, inner2;
         outerBorders = voronoiPath.append("svg:g").attr("id", "point-borders");
         clips = voronoiPath.append("svg:g").attr("id", "point-clips");
         paths = voronoiPath.append("svg:g").attr("id", "point-paths");
@@ -283,6 +284,40 @@
             .style("stroke-width", strokeWidth)
             .style("stroke-linecap", "round")
             .style("stroke", "black");
+
+        // returns a layer group for xmap back- and foreground layers
+        function getXMapBaseLayers(url, style, token, attribution) {
+            var background = new L.TileLayer.WMS(url, {
+                maxZoom: 19, minZoom: 0, opacity: 1.0,
+                noWrap: true,
+                layers: style ? 'xmap-' + style + '-bg' : 'xmap-ajaxbg',
+                format: 'image/png', transparent: false,
+                attribution: attribution
+            });
+
+            var foreground = new L.NonTiledLayer.WMS(url + (token ? "?xtok=" + token : ''), {
+                minZoom: 0, opacity: 1.0,
+                layers: style ? 'xmap-' + style + '-fg' : 'xmap-ajaxfg',
+                format: 'image/png', transparent: true,
+                attribution: attribution,
+                pointerEvents: 'none',
+                zIndex: 1
+            });
+
+            return L.layerGroup([background, foreground]);
+        }
+
+        function fixClickPropagationSoItWorksForIE(container) {
+            container.onclick = L.DomEvent.stopPropagation;
+            var inputTags = container.getElementsByTagName("input");
+            for (var i = 0; i < inputTags.length; i++) {
+                if (inputTags[i].type == "text")
+                    inputTags[i].onclick = L.DomEvent.stopPropagation;
+                inputTags[i].onmousedown = inputTags[i].ondblclick = inputTags[i].onpointerdown = L.DomEvent.stopPropagation;
+            }
+        }
+
+
     </script>
 </body>
 
