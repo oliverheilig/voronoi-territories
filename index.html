@@ -46,14 +46,11 @@
             strokeWidth = 2; // the width of the stroke for the region border
 
         // set up the map
-        var attribution = '<a href="http://www.ptvgroup.com">PTV</a>, TOMTOM';
-        var xMapWmsUrl = 'https://api-test.cloud.ptvgroup.com/WMS/WMS?xtok=678890783139995';
-
         // create a map in the "map" div, set the view to a given place and zoom
         var map = new L.Map('map').setView(mapLocation, 11);
 
         // insert xMap back- and forground layers with sandbox-style
-        getXMapBaseLayers(xMapWmsUrl, "sandbox", null, attribution).addTo(map);
+        getXMapBaseLayers('gravelpit').addTo(map);
 
         // add scale control
         L.control.scale().addTo(map);
@@ -286,18 +283,18 @@
             .style("stroke", "black");
 
         // returns a layer group for xmap back- and foreground layers
-        function getXMapBaseLayers(url, style, token, attribution) {
-            var background = new L.TileLayer.WMS(url, {
-                maxZoom: 19, minZoom: 0, opacity: 1.0,
-                noWrap: true,
-                layers: style ? 'xmap-' + style + '-bg' : 'xmap-ajaxbg',
-                format: 'image/png', transparent: false,
-                attribution: attribution
-            });
+        function getXMapBaseLayers(style) {
+		    var attribution = '<a href="http://www.ptvgroup.com">PTV</a>, TOMTOM';
 
-            var foreground = new L.NonTiledLayer.WMS(url + (token ? "?xtok=" + token : ''), {
+			var background = L.tileLayer('https://api{s}-test.cloud.ptvgroup.com/WMS/GetTile/xmap-' + style + '-bg/{x}/{y}/{z}.png', {
+				minZoom: 0, maxZoom: 19, opacity: 1.0,
+				attribution: attribution,
+				subdomains: '1234'
+			});
+
+            var foreground = new L.NonTiledLayer.WMS('https://api-test.cloud.ptvgroup.com/WMS/WMS?xtok=678890783139995', {
                 minZoom: 0, opacity: 1.0,
-                layers: style ? 'xmap-' + style + '-fg' : 'xmap-ajaxfg',
+                layers: 'xmap-' + style + '-fg',
                 format: 'image/png', transparent: true,
                 attribution: attribution,
                 pointerEvents: 'none',
