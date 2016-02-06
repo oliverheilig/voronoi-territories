@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>POI Locator Demo</title>
+    <title>Voronoi Territories</title>
     <meta charset="utf-8" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -180,7 +180,7 @@
         // create the layer
         var voronoiLayer = new L.SvgLayer({ zIndex: 0 }).addTo(map);
         var voronoiPath = d3.select(voronoiLayer.getPathRoot());
-
+		voronoiLayer.getPathRoot().style.opacity = 0.5;
 
         // the elements holding the svg content
         var paths, clips, borders, inner1, inner2;
