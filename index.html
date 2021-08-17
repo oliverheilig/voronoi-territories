@@ -1,321 +1,304 @@
 ﻿<!DOCTYPE html>
 <html>
-
 <head>
-    <title>Voronoi Territories</title>
-    <meta charset="utf-8" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
-    <style>
-        body {
-            padding: 0;
-            margin: 0;
-        }
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>D3 + Voronooi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        html,
-        body,
-        #map {
-            height: 100%;
-        }
+    <script type="text/javascript" src="https://unpkg.com/maplibre-gl@1.14.0-rc.1/dist/maplibre-gl.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/maplibre-gl@1.14.0-rc.1/dist/maplibre-gl.css">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.0.0/d3.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/voronoi@1.0.0/rhill-voronoi-core.min.js"></script>
 
-        .info {
-            padding: 6px 8px;
-            font: 14px/16px Arial, Helvetica, sans-serif;
-            background: white;
-            background: rgba(255, 255, 255, 0.8);
-        }
-    </style>
+  <style id="compiled-css" type="text/css">
+    body { margin: 0; padding: 0; }
+    #map { position:absolute; top:0; bottom:0; width:100%; }
+  </style>
 </head>
-
 <body>
-    <div id="map"></div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
-    <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
-    <script src="./NonTiledLayer.js"></script>
-    <script src="./NonTiledLayer.WMS.js"></script>
-    <script src="./d3.min.js" type="text/javascript"></script> <!-- have to add it locally, sometimes doesn't load from cdn -->
-    <script src="./d3layer.js"></script>
-    <script src="./rhill-voronoi-core.min.js"></script>
-    <script type="text/javascript">
-        var mapLocation = new L.LatLng(49.6, 6.116667), // Luxembourg
-            w = 0.4, // longitudal degrees range vor random coorindates
-            h = 0.2, // latitudal degrees range for random coordinates
-            count = 200, // number of random points to create
-            buffer = 2500, // buffer for voronooi regions in meters
-            strokeWidth = 2; // the width of the stroke for the region border
+<div id="map"></div>
+<script type="text/javascript">
 
-        // set up the map
-        // create a map in the "map" div, set the view to a given place and zoom
-        var map = new L.Map('map').setView(mapLocation, 11);
+// This is my personal api key. Please get your own free key at https://developer.myptv.com/
+var apiKey = 'YjA2OGIzOGMxMjdiNGZkOGIwYTMwNmI0OGE4Y2ZiMTc6Y2QwZjUyMDYtMTk2Ni00N2NlLWFmNTYtNzBjOWZjZTgxNzJh';
 
-        // insert xMap back- and forground layers with sandbox-style
-        getXMapBaseLayers('gravelpit').addTo(map);
+var mapLocation = new maplibregl.LngLat(6.116667, 49.6), // Luxembourg
+  w = 0.4, // longitudal degrees range vor random coorindates
+  h = 0.2, // latitudal degrees range for random coordinates
+  count = 200, // number of random points to create
+  buffer = 2500, // buffer for voronooi regions in meters
+  strokeWidth = 2; // the width of the stroke for the region border
 
-        // add scale control
-        L.control.scale().addTo(map);
+maplibregl.setRTLTextPlugin(
+  'https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-rtl-text/v0.2.3/mapbox-gl-rtl-text.js',
+  null,
+  true // Lazy load the plugin
+);
 
-        // add input control
-        var info = L.control();
-        info.onAdd = function (map) {
-            var container = L.DomUtil.create('div', 'info leaflet-bar');
-            var html =
-                '<div>ToDo: UI</div>';
-            container.innerHTML = html;
-            fixClickPropagationSoItWorksForIE(container);
-            return container;
-        };
-        info.addTo(map);
+var map = new maplibregl.Map({
+  attributionControl: true,
+  customAttribution: '&copy; 2021 PTV AG, HERE',
+  container: 'map',
+  zoom: 10,
+  pitch: 0,
+  center: mapLocation,
+  antialias: true,
+  hash: true,
+  style: 'https://vectormaps-resources.myptv.com/styles/1_1_0/standard.json',
+  transformRequest: (url, resourceType) => {
+    if (resourceType === 'Tile' && url.startsWith('https://api.myptv.com')) {
+      return {
+        url: url + '?apiKey=' + apiKey
+      }
+    }
+  }
+});
 
-        var types = ["#7fc97f", "#beaed4", "#fdc086", "#ffff99"];
+map.on("viewreset", render);
+map.on("move", render);
+map.on("moveend", render);
 
-        // create some (not completely) random points and assignments
-        var vertices = d3.range(count).map(function (d, i) {
-            var a = Math.random();
-            var type = Math.floor(types.length * a);
-            var b = Math.pow(Math.random(), 0.75);
-            var r = Math.random();
-            var x = Math.cos(a * 2 * Math.PI + r) * b * 0.5;
-            var y = Math.sin(a * 2 * Math.PI + r) * b * 0.5;
-            return {
-                id: i, lng: mapLocation.lng + w * x, lat: mapLocation.lat + h * y,
-                type: types[type]
-            };
-        });
+var types = ["#7fc97f", "#beaed4", "#fdc086", "#ffff99"];
 
+// create some (not completely) random points and assignments
+var vertices = d3.range(count).map(function(d, i) {
+  var a = Math.random();
+  var type = Math.floor(types.length * a);
+  var b = Math.pow(Math.random(), 0.75);
+  var r = Math.random();
+  var x = Math.cos(a * 2 * Math.PI + r) * b * 0.5;
+  var y = Math.sin(a * 2 * Math.PI + r) * b * 0.5;
+  return {
+    id: i,
+    lng: mapLocation.lng + w * x,
+    lat: mapLocation.lat + h * y,
+    type: types[type]
+  };
+});
 
-        // create the layer for the symbols
-        var applyLatLngToLayer = function (d) {
-            var p = map.latLngToLayerPoint(new L.LatLng(d.lat, d.lng));
-            return "translate(" + p.x + "," + p.y + ")";
-        };
+// create the layer for the symbols
+// the layer for the symbols is topmost  
+var container = map.getCanvasContainer();
+var svg = d3
+  .select(container)
+  .append("svg")
+  .attr("width", "100%")
+  .attr("height", "2000")
+  // Ensure d3 layer in front of map
+  .style("position", "absolute")
+  .style("z-index", 10)
+  .style("pointer-events", "none");
 
-        // the layer for the symbols is topmost
-        var pointsLayer = new L.SvgLayer({ zIndex: 2, pointerEvents: 'none' }).addTo(map);
-        var pointsPath = d3.select(pointsLayer.getPathRoot());
-        var points = pointsPath.append("svg:g").attr("id", "points");
+var points = svg.append("svg:g").attr("id", "points");
 
-        // create the points
-        points.selectAll("circle")
-            .data(vertices)
-          .enter().append("svg:circle")
-            .attr("transform", applyLatLngToLayer)
-            .attr("r", 5)
-            .style("fill", function (d) { return d.type; })
-            .attr('stroke', 'black');
+// create the points
+points.selectAll("circle")
+  .data(vertices)
+  .enter().append("svg:circle")
+  .attr("transform", applyLatLngToLayer)
+  .attr("r", 5)
+  .style("fill", d => d.type)
+  .attr('stroke', 'black');
 
-        // Reposition the SVG to cover the features.
-        pointsLayer.resetSvg = function (layer) {
-            points.selectAll("circle")
-                .attr("transform", applyLatLngToLayer);
-        };
+// calculate the coordinates for the (nomrmalized) mercator projections
+// The voronoi diagram is calulated with a conformal projection
+var minx = Math.PI,
+  miny = Math.PI,
+  maxx = -Math.PI,
+  maxy = -Math.PI;
+for (var i = 0; i < vertices.length; i++) {
+  var v = vertices[i];
+  v.x = v.lng * Math.PI / 180.0;
+  v.y = Math.log(Math.tan(Math.PI / 4.0 + v.lat * Math.PI / 360.0));
+  if (v.x < minx) minx = v.x;
+  if (v.y < miny) miny = v.y;
+  if (v.x > maxx) maxx = v.x;
+  if (v.y > maxy) maxy = v.y;
+}
 
+// the buffer in mercator units is resized to match the latitude
+var mbuffer = buffer / 6378137.0 / Math.cos(mapLocation.lat);
 
+// the bbox for the regions
+var bbox = {
+  xl: minx - mbuffer,
+  xr: maxx + mbuffer,
+  yt: miny - mbuffer,
+  yb: maxy + mbuffer
+};
 
-        // calculate the coordinates for the (conformal) mercator projections
-        // The voronoi diagram is calulated with mercator coordinates
-        var minx = Math.PI * 6378137, miny = Math.PI * 6378137, maxx = -Math.PI * 6378137, maxy = -Math.PI * 6378137;
-        for (var i = 0; i < vertices.length; i++) {
-            var v = vertices[i];
-            var merc = L.Projection.SphericalMercator.project(L.latLng(v.lat, v.lng));
-            v.x = merc.x;
-            v.y = merc.y;
-            if (merc.x < minx) minx = merc.x;
-            if (merc.y < miny) miny = merc.y;
-            if (merc.x > maxx) maxx = merc.x;
-            if (merc.y > maxy) maxy = merc.y;
-        }
+// create the voronoi diagram
+var vorolib = new Voronoi();
+var voronoi = vorolib.compute(vertices, this.bbox);
 
-        // the buffer in mercator units is resized to match the latitude
-        var mbuffer = buffer / Math.cos(mapLocation.lat);
+// the inner edges are voronoi edges that have differently assigned sites
+var innerEdges = [];
+for (var i = 0; i < voronoi.edges.length; i++) {
+  var e = voronoi.edges[i];
+  if (e.lSite && e.rSite && e.lSite.type !== e.rSite.type)
+    innerEdges.push(e);
+}
 
-        // the corresponding normalized radius for leaflet spherical mercator
-        var nradius = mbuffer;
+// create the vornoi layer
+svg = d3
+  .select(container)
+  .append("svg")
+  .attr("width", "100%")
+  .attr("height", "2000")
+  // Ensure d3 layer in front of map
+  .style("position", "absolute")
+  .style("opacity", 0.5)
+  .style("z-index", 1);
 
-        // create the voronoi diagram
-        var vorolib = new Voronoi();
-        var bbox = { xl: minx - nradius, xr: maxx + nradius, yt: miny - nradius, yb: maxy + nradius };
-        var voronoi = vorolib.compute(vertices, this.bbox);
+// the elements holding the svg content
+var paths, clips, borders, inner1, inner2;
+outerBorders = svg.append("svg:g").attr("id", "point-borders");
+clips = svg.append("svg:g").attr("id", "point-clips");
+paths = svg.append("svg:g").attr("id", "point-paths");
+inner1 = svg.append("svg:g").attr("id", "inner-borders1");
+inner2 = svg.append("svg:g").attr("id", "inner-borders2");
 
-        // the inner edges are voronoi edges that have differently assigned sites
-        var innerEdges = [];
-        for (var i = 0; i < voronoi.edges.length; i++) {
-            var e = voronoi.edges[i];
-            if (e.lSite && e.rSite && e.lSite.type !== e.rSite.type)
-                innerEdges.push(e);
-        }
+// create circles that render the outer border
+outerBorders.selectAll("circle")
+  .data(vertices)
+  .enter().append("svg:circle")
+  .attr("transform", d =>applyMercToLayer(d))
+  .attr('r', mbuffer * getMercatorScale() + strokeWidth)
+  .attr('stroke', 'none')
+  .style('fill', 'black');
 
-        // create the vornoi layer
+// create the circles as clip paths
+clips.selectAll("clipPath")
+  .data(vertices)
+  .enter().append("svg:clipPath")
+  .attr("id", (d, i) => "clip-" + d.id)
+  .append("svg:circle")
+  .attr('cx', d => map.project(new maplibregl.LngLat(d.lng, d.lat)).x)
+  .attr('cy', d => map.project(new maplibregl.LngLat(d.lng, d.lat)).y)
+  .attr('r', mbuffer * getMercatorScale());
 
-        // transform a mercator coordinate to a relative layer coordinate
-        // ToDo: must be a more direct way
-        var mercToLayerPoint = function (m) {
-            var g = L.Projection.SphericalMercator.unproject(L.point(m.x, m.y));
-            return map.latLngToLayerPoint(new L.LatLng(g.lat, g.lng));
-        }
+// create the (clipped) cells, don't render the edges
+paths.selectAll("path")
+  .data(voronoi.cells)
+  .enter().append("svg:path")
+  .attr("d", d => getPath(d))
+  .attr("id", d => "path-" + d.site.id)
+  .attr("clip-path", d => "url(#clip-" + d.site.id + ")")
+  .style("fill", d => d.site.type)
+  .style("stroke", d =>d.site.type);
 
-        // get the translate string
-        var applyMercToLayer = function (m) {
-            var p = mercToLayerPoint(m);
-            return "translate(" + p.x + "," + p.y + ")";
-        }
+// some interaction on the cells
+paths.selectAll("path")
+  .on("mouseover", function(d, i) {
+    d3.select(this)
+      .style('fill', d3.rgb(164, 164, 164));
+  })
+  .on("mouseout", function(d, i) {
+    d3.select(this)
+      .style("fill", i.site.type);
+  });
 
-        // get the path for a voronoi region
-        var getPath = function (d) {
-            var coords = [];
-            var v = d.halfedges[0].getStartpoint();
-            v = mercToLayerPoint(v);
-            coords.push([v.x, v.y]);
-            for (var i = 0; i < d.halfedges.length; i++) {
-                v = d.halfedges[i].getEndpoint();
-                v = mercToLayerPoint(v);
-                coords.push([v.x, v.y]);
-            }
-            return "M" + coords.join(",") + "Z";
-        };
+// create the edges clipped against the circle of the left site
+inner1.selectAll("line")
+  .data(innerEdges)
+  .enter().append("line")
+  .attr("x1", d => mercToLayerPoint(d.va).x)
+  .attr("y1", d => mercToLayerPoint(d.va).y)
+  .attr("x2", d => mercToLayerPoint(d.vb).x)
+  .attr("y2", d => mercToLayerPoint(d.vb).y)
+  .attr("clip-path", (d, i) =>"url(#clip-" + d.lSite.id + ")")
+  .style("stroke-width", strokeWidth)
+  .style("stroke-linecap", "round")
+  .style("stroke", "black");
 
-        // create the layer
-        var voronoiLayer = new L.SvgLayer({ zIndex: 0 }).addTo(map);
-        var voronoiPath = d3.select(voronoiLayer.getPathRoot());
-		voronoiLayer.getPathRoot().style.opacity = 0.5;
+// create the edges clipped against the circle of the right site
+inner2.selectAll("line")
+  .data(innerEdges)
+  .enter().append("line")
+  .attr("x1", d => mercToLayerPoint(d.va).x)
+  .attr("y1", d => mercToLayerPoint(d.va).y)
+  .attr("x2", d => mercToLayerPoint(d.vb).x)
+  .attr("y2", d => mercToLayerPoint(d.vb).y)
+  .attr("clip-path", (d, i) => "url(#clip-" + d.rSite.id + ")")
+  .style("stroke-width", strokeWidth)
+  .style("stroke-linecap", "round")
+  .style("stroke", "black");
 
-        // the elements holding the svg content
-        var paths, clips, borders, inner1, inner2;
-        outerBorders = voronoiPath.append("svg:g").attr("id", "point-borders");
-        clips = voronoiPath.append("svg:g").attr("id", "point-clips");
-        paths = voronoiPath.append("svg:g").attr("id", "point-paths");
-        inner1 = voronoiPath.append("svg:g").attr("id", "inner-borders1");
-        inner2 = voronoiPath.append("svg:g").attr("id", "inner-borders2");
+render();
 
-        // create circles that render the outer border
-        outerBorders.selectAll("circle")
-            .data(vertices)
-          .enter().append("svg:circle")
-            .attr("transform", function (d) { return applyMercToLayer(d); })
-            .attr('r', nradius / 6378137 / 2 / Math.PI * map.options.crs.scale(map.getZoom()) + strokeWidth)
-            .attr('stroke', 'none')
-            .style('fill', 'black');
+function applyLatLngToLayer(d) {
+  var p = map.project(new maplibregl.LngLat(d.lng, d.lat));
+  return "translate(" + p.x + "," + p.y + ")";
+}
 
-        // create the circles as clip paths
-        clips.selectAll("clipPath")
-            .data(vertices)
-          .enter().append("svg:clipPath")
-            .attr("id", function (d, i) { return "clip-" + d.id; })
-          .append("svg:circle")
-            .attr('cx', function (d) { return map.latLngToLayerPoint(new L.LatLng(d.lat, d.lng)).x; })
-            .attr('cy', function (d) { return map.latLngToLayerPoint(new L.LatLng(d.lat, d.lng)).y; })
-            .attr('r', nradius / 6378137 / 2 / Math.PI * map.options.crs.scale(map.getZoom()));
+// transform a mercator coordinate to a relative layer coordinate
+function mercToLayerPoint(m) {
+  var earthC = 1.0;
+  var lat = 360 / Math.PI * (Math.atan(Math.exp(m.y / earthC)) - Math.PI / 4);
+  var lng = 180.0 / Math.PI * (m.x / earthC);
 
+  return map.project(new maplibregl.LngLat(lng, lat));
+}
 
-        // Reposition the SVG elements.
-        voronoiLayer.resetSvg = function (layer) {
-            outerBorders.selectAll("circle")
-            .attr("transform", function (d) { return applyMercToLayer(d); })
-            .attr('r', nradius / 6378137 / 2 / Math.PI * map.options.crs.scale(map.getZoom()) + strokeWidth)
+// get the translate string
+function applyMercToLayer(m) {
+  var p = mercToLayerPoint(m);
+  return "translate(" + p.x + "," + p.y + ")";
+}
 
-            paths.selectAll("path")
-             .attr("d", function (d) { return getPath(d); });
+function project(d) {
+  return map.project(new maplibregl.LngLat(d.lng, d.lat));
+}
 
-            clips.selectAll("clipPath")
-            .selectAll("circle")
-            .attr('cx', function (d) { return map.latLngToLayerPoint(new L.LatLng(d.lat, d.lng)).x; })
-            .attr('cy', function (d) { return map.latLngToLayerPoint(new L.LatLng(d.lat, d.lng)).y; })
-            .attr('r', nradius / 6378137 / 2 / Math.PI * map.options.crs.scale(map.getZoom()));
+function getMercatorScale() {
+	return 256.0 / 1.0 / Math.PI * Math.pow(2, map.getZoom());
+}
 
-            inner1.selectAll("line")
-            .attr("x1", function (d) { return mercToLayerPoint(d.va).x; })
-            .attr("y1", function (d) { return mercToLayerPoint(d.va).y; })
-            .attr("x2", function (d) { return mercToLayerPoint(d.vb).x; })
-            .attr("y2", function (d) { return mercToLayerPoint(d.vb).y; });
+// get the path for a voronoi region
+function getPath(d) {
+  var coords = [];
+  var v = d.halfedges[0].getStartpoint();
+  v = mercToLayerPoint(v);
+  coords.push([v.x, v.y]);
+  for (var i = 0; i < d.halfedges.length; i++) {
+    v = d.halfedges[i].getEndpoint();
+    v = mercToLayerPoint(v);
+    coords.push([v.x, v.y]);
+  }
+  return "M" + coords.join(",") + "Z";
+}
 
-            inner2.selectAll("line")
-            .attr("x1", function (d) { return mercToLayerPoint(d.va).x; })
-            .attr("y1", function (d) { return mercToLayerPoint(d.va).y; })
-            .attr("x2", function (d) { return mercToLayerPoint(d.vb).x; })
-            .attr("y2", function (d) { return mercToLayerPoint(d.vb).y; });
-        };
+// Render method redraws lines
+function render() {
+  points.selectAll("circle")
+    .attr("transform", applyLatLngToLayer);
 
-        // create the (clipped) cells, don't render the edges
-        paths.selectAll("path")
-            .data(voronoi.cells)
-          .enter().append("svg:path")
-            .attr("d", function (d) { return getPath(d); })
-            .attr("id", function (d) { return "path-" + d.site.id; })
-            .attr("clip-path", function (d) { return "url(#clip-" + d.site.id + ")"; })
-            .style("fill", function (d) { return d.site.type; })
-            .style("stroke", function (d) { return d.site.type; });
+  outerBorders.selectAll("circle")
+    .attr("transform", d => applyMercToLayer(d))
+    .attr('r', mbuffer * getMercatorScale() + strokeWidth)
+    
+  paths.selectAll("path")
+    .attr("d", d => getPath(d));
 
-        // some interaction on the cells
-        paths.selectAll("path")
-          .on("mouseover", function (d, i) {
-              d3.select(this)
-                .style('fill', d3.rgb(164, 164, 164));
-          })
-          .on("mouseout", function (d, i) {
-              d3.select(this)
-                .style("fill", d.site.type);
-          });
+  clips.selectAll("clipPath")
+    .selectAll("circle")
+    .attr('cx', d => map.project(new maplibregl.LngLat(d.lng, d.lat)).x)
+    .attr('cy', d => map.project(new maplibregl.LngLat(d.lng, d.lat)).y)
+    .attr('r', mbuffer * getMercatorScale());
 
-        // create the edges clipped against the circle of the left site
-        inner1.selectAll("line")
-            .data(innerEdges)
-          .enter().append("line")
-            .attr("x1", function (d) { return mercToLayerPoint(d.va).x; })
-            .attr("y1", function (d) { return mercToLayerPoint(d.va).y; })
-            .attr("x2", function (d) { return mercToLayerPoint(d.vb).x; })
-            .attr("y2", function (d) { return mercToLayerPoint(d.vb).y; })
-            .attr("clip-path", function (d, i) { return "url(#clip-" + d.lSite.id + ")"; })
-            .style("stroke-width", strokeWidth)
-            .style("stroke-linecap", "round")
-            .style("stroke", "black");
+  inner1.selectAll("line")
+    .attr("x1", d => mercToLayerPoint(d.va).x)
+    .attr("y1", d => mercToLayerPoint(d.va).y)
+    .attr("x2", d => mercToLayerPoint(d.vb).x)
+    .attr("y2", d => mercToLayerPoint(d.vb).y);
 
-        // create the edges clipped against the circle of the right site
-        inner2.selectAll("line")
-            .data(innerEdges)
-          .enter().append("line")
-            .attr("x1", function (d) { return mercToLayerPoint(d.va).x; })
-            .attr("y1", function (d) { return mercToLayerPoint(d.va).y; })
-            .attr("x2", function (d) { return mercToLayerPoint(d.vb).x; })
-            .attr("y2", function (d) { return mercToLayerPoint(d.vb).y; })
-            .attr("clip-path", function (d, i) { return "url(#clip-" + d.rSite.id + ")"; })
-            .style("stroke-width", strokeWidth)
-            .style("stroke-linecap", "round")
-            .style("stroke", "black");
+  inner2.selectAll("line")
+    .attr("x1", d => mercToLayerPoint(d.va).x)
+    .attr("y1", d => mercToLayerPoint(d.va).y)
+    .attr("x2", d => mercToLayerPoint(d.vb).x)
+    .attr("y2", d => mercToLayerPoint(d.vb).y);
+}
+</script>
 
-        // returns a layer group for xmap back- and foreground layers
-        function getXMapBaseLayers(style) {
-		    var attribution = '<a href="http://www.ptvgroup.com">PTV</a>, TOMTOM';
-
-			var background = L.tileLayer('https://api{s}-test.cloud.ptvgroup.com/WMS/GetTile/xmap-' + style + '-bg/{x}/{y}/{z}.png', {
-				minZoom: 0, maxZoom: 19, opacity: 1.0,
-				attribution: attribution,
-				subdomains: '1234'
-			});
-
-            var foreground = new L.NonTiledLayer.WMS('https://api-test.cloud.ptvgroup.com/WMS/WMS?xtok=C9ECD48F-BE8A-4113-88A4-67158B8BD9CB', {
-                minZoom: 0, opacity: 1.0,
-                layers: 'xmap-' + style + '-fg',
-                format: 'image/png', transparent: true,
-                attribution: attribution,
-                pointerEvents: 'none',
-                zIndex: 1
-            });
-
-            return L.layerGroup([background, foreground]);
-        }
-
-        function fixClickPropagationSoItWorksForIE(container) {
-            container.onclick = L.DomEvent.stopPropagation;
-            var inputTags = container.getElementsByTagName("input");
-            for (var i = 0; i < inputTags.length; i++) {
-                if (inputTags[i].type == "text")
-                    inputTags[i].onclick = L.DomEvent.stopPropagation;
-                inputTags[i].onmousedown = inputTags[i].ondblclick = inputTags[i].onpointerdown = L.DomEvent.stopPropagation;
-            }
-        }
-
-
-    </script>
 </body>
-
 </html>
