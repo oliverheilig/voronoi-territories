@@ -132,12 +132,7 @@ var vorolib = new Voronoi();
 var voronoi = vorolib.compute(vertices, this.bbox);
 
 // the inner edges are voronoi edges that have differently assigned sites
-var innerEdges = [];
-for (var i = 0; i < voronoi.edges.length; i++) {
-  var e = voronoi.edges[i];
-  if (e.lSite && e.rSite && e.lSite.type !== e.rSite.type)
-    innerEdges.push(e);
-}
+var innerEdges = voronoi.edges.filter(e => e.lSite && e.rSite && e.lSite.type !== e.rSite.type);
 
 // create the vornoi layer
 svg = d3
@@ -162,8 +157,6 @@ inner2 = svg.append("svg:g").attr("id", "inner-borders2");
 outerBorders.selectAll("circle")
   .data(vertices)
   .enter().append("svg:circle")
-  .attr("transform", d =>applyMercToLayer(d))
-  .attr('r', mbuffer * getMercatorScale() + strokeWidth)
   .attr('stroke', 'none')
   .style('fill', 'black');
 
@@ -172,20 +165,16 @@ clips.selectAll("clipPath")
   .data(vertices)
   .enter().append("svg:clipPath")
   .attr("id", (d, i) => "clip-" + d.id)
-  .append("svg:circle")
-  .attr('cx', d => map.project(new maplibregl.LngLat(d.lng, d.lat)).x)
-  .attr('cy', d => map.project(new maplibregl.LngLat(d.lng, d.lat)).y)
-  .attr('r', mbuffer * getMercatorScale());
+  .append("svg:circle");
 
 // create the (clipped) cells, don't render the edges
 paths.selectAll("path")
   .data(voronoi.cells)
   .enter().append("svg:path")
-  .attr("d", d => getPath(d))
   .attr("id", d => "path-" + d.site.id)
   .attr("clip-path", d => "url(#clip-" + d.site.id + ")")
   .style("fill", d => d.site.type)
-  .style("stroke", d =>d.site.type);
+  .style("stroke", d => d.site.type);
 
 // some interaction on the cells
 paths.selectAll("path")
@@ -202,11 +191,7 @@ paths.selectAll("path")
 inner1.selectAll("line")
   .data(innerEdges)
   .enter().append("line")
-  .attr("x1", d => mercToLayerPoint(d.va).x)
-  .attr("y1", d => mercToLayerPoint(d.va).y)
-  .attr("x2", d => mercToLayerPoint(d.vb).x)
-  .attr("y2", d => mercToLayerPoint(d.vb).y)
-  .attr("clip-path", (d, i) =>"url(#clip-" + d.lSite.id + ")")
+  .attr("clip-path", (d, i) => "url(#clip-" + d.lSite.id + ")")
   .style("stroke-width", strokeWidth)
   .style("stroke-linecap", "round")
   .style("stroke", "black");
@@ -215,10 +200,6 @@ inner1.selectAll("line")
 inner2.selectAll("line")
   .data(innerEdges)
   .enter().append("line")
-  .attr("x1", d => mercToLayerPoint(d.va).x)
-  .attr("y1", d => mercToLayerPoint(d.va).y)
-  .attr("x2", d => mercToLayerPoint(d.vb).x)
-  .attr("y2", d => mercToLayerPoint(d.vb).y)
   .attr("clip-path", (d, i) => "url(#clip-" + d.rSite.id + ")")
   .style("stroke-width", strokeWidth)
   .style("stroke-linecap", "round")
@@ -251,7 +232,7 @@ function project(d) {
 }
 
 function getMercatorScale() {
-	return 256.0 / 1.0 / Math.PI * Math.pow(2, map.getZoom());
+  return 256.0 / 1.0 / Math.PI * Math.pow(2, map.getZoom());
 }
 
 // get the path for a voronoi region
@@ -276,7 +257,7 @@ function render() {
   outerBorders.selectAll("circle")
     .attr("transform", d => applyMercToLayer(d))
     .attr('r', mbuffer * getMercatorScale() + strokeWidth)
-    
+
   paths.selectAll("path")
     .attr("d", d => getPath(d));
 
@@ -298,6 +279,7 @@ function render() {
     .attr("x2", d => mercToLayerPoint(d.vb).x)
     .attr("y2", d => mercToLayerPoint(d.vb).y);
 }
+
 </script>
 
 </body>
