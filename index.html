@@ -71,7 +71,7 @@ var vertices = d3.range(count).map(function(d, i) {
   return {
     id: i,
     lng: mapLocation.lng + w * x,
-    lat: mapLocation.lat + h * y,
+    lat: mapLocation.lat + h * y / Math.cos(mapLocation.lat),
     type: types[type]
   };
 });
