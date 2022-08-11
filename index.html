@@ -23,10 +23,10 @@
 var apiKey = 'YjA2OGIzOGMxMjdiNGZkOGIwYTMwNmI0OGE4Y2ZiMTc6Y2QwZjUyMDYtMTk2Ni00N2NlLWFmNTYtNzBjOWZjZTgxNzJh';
 
 var mapLocation = new maplibregl.LngLat(8.4044, 49.01405), // Karlsruhe
-  w = 0.4, // longitudal degrees range vor random coorindates
-  h = 0.2, // latitudal degrees range for random coordinates
+  w = 0.15, // longitudal degrees range vor random coorindates
+  h = 0.03, // latitudal degrees range for random coordinates
   count = 200, // number of random points to create
-  buffer = 2500, // buffer for voronooi regions in meters
+  buffer = 750, // buffer for voronooi regions in meters
   strokeWidth = 2; // the width of the stroke for the region border
 
 maplibregl.setRTLTextPlugin(
@@ -37,14 +37,13 @@ maplibregl.setRTLTextPlugin(
 
 var map = new maplibregl.Map({
   attributionControl: true,
-  customAttribution: '&copy; 2022 PTV Group, HERE',
   container: 'map',
-  zoom: 9,
+  zoom: 11,
   pitch: 0,
   center: mapLocation,
   antialias: true,
   hash: true,
-  style: 'https://vectormaps-resources.myptv.com/styles/1_1_0/standard.json',
+  style: 'https://vectormaps-resources.myptv.com/styles/latest/standard.json',
   transformRequest: (url, resourceType) => {
     if (resourceType === 'Tile' && url.startsWith('https://api.myptv.com')) {
       return {
